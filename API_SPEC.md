@@ -6,7 +6,7 @@ All endpoints are prefixed with `/api`.
 
 ## **1. Register User**
 
-**Endpoint:** `/api/register`  
+**Endpoint:** `/api/signup`  
 **Method:** `POST`  
 **Description:** Registers a new user and stores hashed password in the database.
 

@@ -5,74 +5,30 @@ import (
 	"ReactAuthBackend/models"
 	"ReactAuthBackend/utils"
 	"strconv"
-	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Register creates a new user
+// REGISTER: Create a new user
 func Register(c *fiber.Ctx) error {
 	var data map[string]string
 	if err := c.BodyParser(&data); err != nil {
 		return err
 	}
 
-	// Input validation
-	if len(strings.TrimSpace(data["name"])) < 3 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "invalid_name",
-			"message": "Name must be at least 3 characters",
-		})
-	}
+	// Hash password using bcrypt
+	passwordHash, _ := bcrypt.GenerateFromPassword([]byte(data["password"]), 12)
 
-	if !strings.Contains(data["email"], "@") {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "invalid_email",
-			"message": "Email is invalid",
-		})
-	}
-
-	if len(data["password"]) < 8 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "weak_password",
-			"message": "Password must be at least 8 characters",
-		})
-	}
-
-	// Check duplicate email
-	var existing models.User
-	initializers.DB.Where("email = ?", data["email"]).First(&existing)
-	if existing.ID != 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "email_exists",
-			"message": "Email already registered",
-		})
-	}
-
-	// Hash password
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(data["password"]), 12)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "hash_error",
-			"message": "Error hashing password",
-		})
-	}
-
+	// Create user struct
 	user := models.User{
 		Name:     data["name"],
 		Email:    data["email"],
 		Password: passwordHash,
 	}
 
-	// Save user
-	result := initializers.DB.Create(&user)
-	if result.Error != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "db_error",
-			"message": "Could not create user",
-		})
-	}
+	// Save user to database
+	initializers.DB.Create(&user)
 
 	return c.JSON(fiber.Map{
 		"id":    user.ID,
@@ -81,62 +37,30 @@ func Register(c *fiber.Ctx) error {
 	})
 }
 
-// Login authenticates a user and sends tokens
+// LOGIN: Authenticate user and return access + refresh tokens
 func Login(c *fiber.Ctx) error {
 	var data map[string]string
 	if err := c.BodyParser(&data); err != nil {
 		return err
 	}
 
-	// Find user
 	var user models.User
 	initializers.DB.Where("email = ?", data["email"]).First(&user)
 	if user.ID == 0 {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error":   "user_not_found",
-			"message": "No user with that email",
-		})
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"message": "User not found"})
 	}
 
-	// Compare password
 	if err := bcrypt.CompareHashAndPassword(user.Password, []byte(data["password"])); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":   "wrong_password",
-			"message": "Incorrect password",
-		})
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"message": "Incorrect password"})
 	}
 
-	// Generate tokens
-	accessToken, err := utils.GenerateAccessToken(user.ID)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "token_error",
-			"message": "Could not generate access token",
-		})
-	}
-
-	refreshToken, err := utils.GenerateRefreshToken(user.ID)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "token_error",
-			"message": "Could not generate refresh token",
-		})
-	}
-
-	// Send refresh token in HTTP-only cookie
-	cookie := fiber.Cookie{
-		Name:     "refresh_token",
-		Value:    refreshToken,
-		HTTPOnly: true,
-		Path:     "/api/refresh",
-		MaxAge:   60 * 60 * 24 * 30, // 30 days
-		// Secure:   true, // uncomment in production
-		// SameSite: "Strict", // uncomment in production
-	}
-	c.Cookie(&cookie)
+	// Generate access + refresh tokens
+	accessToken, _ := utils.GenerateAccessToken(user.ID)
+	refreshToken, _ := utils.GenerateRefreshToken(user.ID)
 
 	return c.JSON(fiber.Map{
-		"accessToken": accessToken,
+		"accessToken":  accessToken,
+		"refreshToken": refreshToken,
 		"user": fiber.Map{
 			"id":    user.ID,
 			"name":  user.Name,
@@ -145,78 +69,44 @@ func Login(c *fiber.Ctx) error {
 	})
 }
 
-// RefreshToken issues a new access token using the refresh cookie
+// REFRESH: Use refresh token to get a new access token
 func RefreshToken(c *fiber.Ctx) error {
-	cookie := c.Cookies("refresh_token")
-	if cookie == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   "no_token",
-			"message": "Refresh token missing",
-		})
+	var data map[string]string
+	if err := c.BodyParser(&data); err != nil {
+		return err
 	}
 
-	claims, err := utils.VerifyRefreshToken(cookie)
+	refreshToken := data["refreshToken"]
+	if refreshToken == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"message": "Refresh token required"})
+	}
+
+	claims, err := utils.VerifyRefreshToken(refreshToken)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   "invalid_token",
-			"message": "Refresh token invalid or expired",
-		})
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"message": "Invalid refresh token"})
 	}
 
 	userID, _ := strconv.Atoi(claims.Issuer)
-	accessToken, err := utils.GenerateAccessToken(uint(userID))
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "token_error",
-			"message": "Could not generate access token",
-		})
-	}
+	accessToken, _ := utils.GenerateAccessToken(uint(userID))
 
-	return c.JSON(fiber.Map{
-		"accessToken": accessToken,
-	})
+	return c.JSON(fiber.Map{"accessToken": accessToken})
 }
 
-// Logout deletes refresh token cookie
+// LOGOUT: Invalidate tokens (frontend can delete them)
 func Logout(c *fiber.Ctx) error {
-	cookie := fiber.Cookie{
-		Name:     "refresh_token",
-		Value:    "",
-		HTTPOnly: true,
-		Path:     "/api/refresh",
-		MaxAge:   -1,
-		// Secure:   true, // uncomment in production
-		// SameSite: "Strict", // uncomment in production
-	}
-	c.Cookie(&cookie)
-
-	return c.JSON(fiber.Map{
-		"message": "logged out",
-	})
+	// Since tokens are stateless JWTs, logout is handled by client deleting tokens.
+	// You can optionally implement a blacklist if you want.
+	return c.JSON(fiber.Map{"message": "Logout successful. Delete tokens on client side."})
 }
 
-// User returns currently authenticated user info
+// USER: Protected route, returns authenticated user's info
 func User(c *fiber.Ctx) error {
 	userID := c.Locals("userID")
 	if userID == nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   "unauthenticated",
-			"message": "User not authenticated",
-		})
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"message": "User not authenticated"})
 	}
 
 	var user models.User
 	initializers.DB.Where("id = ?", userID).First(&user)
-	if user.ID == 0 {
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error":   "user_not_found",
-			"message": "User does not exist",
-		})
-	}
-
-	return c.JSON(fiber.Map{
-		"id":    user.ID,
-		"name":  user.Name,
-		"email": user.Email,
-	})
+	return c.JSON(user)
 }

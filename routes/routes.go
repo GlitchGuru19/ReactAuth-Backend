@@ -8,11 +8,11 @@ import (
 )
 
 func SetUpRoutes(app *fiber.App) {
-	app.Post("/api/signup", controllers.Register)
+	app.Post("/api/register", controllers.Register)
 	app.Post("/api/login", controllers.Login)
 	app.Post("/api/refresh", controllers.RefreshToken)
 	app.Post("/api/logout", controllers.Logout)
 
 	// Protected route
-	app.Get("/api/user", middleware.RequireAuth, controllers.User)
+	app.Get("/api/user", middleware.Protect(), controllers.User)
 }

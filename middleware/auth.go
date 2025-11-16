@@ -7,36 +7,32 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-// RequireAuth is a middleware that protects routes using access token
-func RequireAuth(c *fiber.Ctx) error {
-	authHeader := c.Get("Authorization") // get token from header
+// Protect middleware checks for access token
+func Protect() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		authHeader := c.Get("Authorization") // expects "Bearer <accessToken>"
+		if authHeader == "" {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"message": "Authorization header required",
+			})
+		}
 
-	if authHeader == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   "no_token",
-			"message": "Authorization header is missing",
-		})
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"message": "Authorization must be Bearer <token>",
+			})
+		}
+
+		tokenStr := parts[1]
+		claims, err := utils.VerifyAccessToken(tokenStr)
+		if err != nil {
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"message": "Invalid or expired access token",
+			})
+		}
+
+		c.Locals("userID", claims.Issuer)
+		return c.Next()
 	}
-
-	tokenParts := strings.Split(authHeader, " ")
-	if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   "invalid_header",
-			"message": "Authorization header format must be Bearer {token}",
-		})
-	}
-
-	token := tokenParts[1]
-	claims, err := utils.VerifyAccessToken(token)
-	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":   "invalid_token",
-			"message": "Access token is invalid or expired",
-		})
-	}
-
-	// Store user ID in locals for controllers
-	c.Locals("userID", claims.Issuer)
-
-	return c.Next()
 }
