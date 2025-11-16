@@ -1,73 +1,95 @@
-# Authentication API Specification
+# ReactAuthBackend API Specification
 
-Base URL:
-bash
-Copy code
-http://localhost:8000/api
+All endpoints are prefixed with `/api`.
 
-### 1. Register User
-POST /register
-Request (JSON)
-json
-Copy code
+---
+
+## **1. Register User**
+
+**Endpoint:** `/api/register`  
+**Method:** `POST`  
+**Description:** Registers a new user and stores hashed password in the database.
+
+### Request Body (JSON)
+```json
 {
-  "name": "Peter Kabwe",
-  "email": "peter@example.com",
-  "password": "mypassword123"
+  "name": "John Doe",
+  "email": "johndoe@example.com",
+  "password": "password123"
 }
-Successful Response (JSON)
+Success Response (201)
 json
-Copy code
 {
-  "ID": 1,
-  "CreatedAt": "2025-01-01T12:00:00Z",
-  "UpdatedAt": "2025-01-01T12:00:00Z",
-  "DeletedAt": null,
-  "name": "Peter Kabwe",
-  "email": "peter@example.com",
-  "password": "$2a$12$encryptedhash..."
+  "id": 1,
+  "name": "John Doe",
+  "email": "johndoe@example.com"
 }
 
-
-### 2. Login User
-POST /login
-Request (JSON)
+Error Response (400)
 json
-Copy code
 {
-  "email": "peter@example.com",
-  "password": "mypassword123"
+  "message": "failed to parse request"
 }
-Successful Response (JSON)
-json
-Copy code
+```
+
+## **2. Login User**
+**Endpoint:** `/api/login`
+Method: POST
+Description: Logs in a user, generates JWT, and sets a secure HTTP-only cookie.
+
+### Request Body (JSON)
+```json
+{
+  "email": "johndoe@example.com",
+  "password": "password123"
+}
+
+Success Response (200)
+```json
 {
   "message": "success"
 }
-Notes
-A JWT token is set in HTTP-only cookie named jwt
 
-You do NOT need to store the token in frontend localStorage
+Cookie set: jwt=<token> (HTTP-only, expires in 24h)
 
-### 3. Get Authenticated User
-GET /user
-Request
-No body required.
-The cookie jwt must be present.
+Error Responses
+User not found (404)
 
-Successful Response (JSON)
-json
-Copy code
+```json
 {
-  "ID": 1,
-  "CreatedAt": "2025-01-01T12:00:00Z",
-  "UpdatedAt": "2025-01-01T12:00:00Z",
-  "DeletedAt": null,
-  "name": "Peter Kabwe",
-  "email": "peter@example.com"
+  "message": "user not found"
 }
 
-Failure Response (JWT missing or invalid)
+Incorrect password (400)
+
+```json
+{
+  "message": "incorrect password"
+}
+
+Server error (500)
+
+```json
+{
+  "message": "could not log in"
+}
+```
+
+## **3. Get Current User (User Info)**
+**Endpoint**: `/api/user`
+**Method**: `GET`
+Description: Returns the currently authenticated user based on JWT in cookie.
+
+Headers
+Cookie: jwt=<token>
+Success Response (200)
+json
+{
+  "id": 1,
+  "name": "John Doe",
+  "email": "johndoe@example.com"
+}
+Error Response (401)
 json
 Copy code
 {
@@ -75,36 +97,28 @@ Copy code
 }
 
 
-### 4. Logout User
-POST /logout
-Request
-No body required.
+## 4. Logout User
+Endpoint: /api/logout
+Method: POST
+Description: Logs out the user by clearing the JWT cookie.
 
-Successful Response
+Headers
+
+Cookie: jwt=<token>
+
+Success Response (200)
 json
-Copy code
 {
   "message": "success"
 }
-
 Notes
-The backend deletes the JWT cookie by setting an expired cookie.
+All requests and responses are in JSON.
 
-Summary of Endpoints
-Method	Endpoint	Description	Auth          Required
-POST	/register	Create a new user	      ❌ No
-POST	/login	    Log in user, set cookie	  ❌ No
-GET	/user	        Get current user	      ✔️ Yes
-POST	/logout	    Logout user	              ✔️ Yes
+Passwords are always hashed and never returned in any response.
 
-Frontend Notes (React)
-When sending requests from frontend:
+JWT is stored in HTTP-only cookie; frontend should send credentials with fetch:
 
-Must include cookies:
-js
-Copy code
-fetch("http://localhost:8000/api/user", {
+ fetch("/api/user", {
   method: "GET",
-  credentials: "include"
-});
-Otherwise the cookie will not be sent.
+  credentials : "include"
+})

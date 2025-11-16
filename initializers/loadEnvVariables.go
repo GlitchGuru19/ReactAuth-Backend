@@ -8,12 +8,19 @@ import (
 )
 
 func LoadEnvVariables() {
-
-	// Load .env file if not in production
+	// Load .env file in development
 	if os.Getenv("ENV") != "production" {
-		err := godotenv.Load()
-		if err != nil {
+		if err := godotenv.Load(); err != nil {
 			log.Fatal("Failed to load .env file")
 		}
 	}
+}
+
+// GetPort returns the PORT from env or default 8000
+func GetPort() string {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8000"
+	}
+	return port
 }

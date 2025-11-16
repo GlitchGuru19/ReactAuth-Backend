@@ -3,6 +3,7 @@ package main
 import (
 	"ReactAuthBackend/initializers"
 	"ReactAuthBackend/routes"
+	"log"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -14,10 +15,8 @@ func init() {
 }
 
 func main() {
-
 	app := fiber.New()
 
-	// Correct Fiber CORS (not Gin)
 	app.Use(cors.New(cors.Config{
 		AllowOrigins:     "http://localhost:5173",
 		AllowCredentials: true,
@@ -26,5 +25,8 @@ func main() {
 
 	routes.SetUpRoutes(app)
 
-	app.Listen(":8000")
+	// Get port from initializer
+	port := initializers.GetPort()
+	log.Printf("Server is running")
+	log.Fatal(app.Listen(":" + port))
 }
