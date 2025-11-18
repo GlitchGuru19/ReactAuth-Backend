@@ -1,124 +1,201 @@
-# ReactAuthBackend API Specification
+This document explains:
 
-All endpoints are prefixed with `/api`.
+What each endpoint does
 
----
+What body to send
 
-## **1. Register User**
+What response to expect
 
-**Endpoint:** `/api/signup`  
-**Method:** `POST`  
-**Description:** Registers a new user and stores hashed password in the database.
+Exactly how to test each one in Postman
 
-### Request Body (JSON)
-```json
+Base URL
+http://localhost:8000/api
+
+------------------------------------
+🔵 1. REGISTER USER
+POST /api/register
+
+Creates a new user.
+
+✅ Request Body (Postman → Body → raw → JSON)
 {
   "name": "John Doe",
   "email": "johndoe@example.com",
-  "password": "password123"
+  "password": "SheLovesIce456"
 }
-Success Response (201)
-json
+
+🟢 Successful Response
 {
   "id": 1,
-  "name": "John Doe",
-  "email": "johndoe@example.com"
+  "name": "Nathan",
+  "email": "nathan@example.com"
 }
 
-Error Response (400)
-json
-{
-  "message": "failed to parse request"
-}
-```
+🧪 How to Test in Postman
 
-## **2. Login User**
-**Endpoint:** `/api/login`
+Create a new request
+
 Method: POST
-Description: Logs in a user, generates JWT, and sets a secure HTTP-only cookie.
 
-### Request Body (JSON)
-```json
+URL: http://localhost:8000/api/register
+
+Body → raw → JSON
+
+Paste the JSON
+
+Send
+
+You should get user info back (no password returned).
+
+------------------------------------
+🟠 2. LOGIN
+POST /api/login
+
+Used to authenticate and receive access + refresh tokens.
+
+✅ Request Body
 {
-  "email": "johndoe@example.com",
-  "password": "password123"
+  "email": "nathan@example.com",
+  "password": "123456"
 }
 
-Success Response (200)
-```json
+🟢 Successful Response
 {
-  "message": "success"
+  "accessToken": "xxxxx",
+  "refreshToken": "xxxxx",
+  "user": {
+    "id": 1,
+    "name": "Nathan",
+    "email": "nathan@example.com"
+  }
 }
 
-Cookie set: jwt=<token> (HTTP-only, expires in 24h)
+🧪 How to Test in Postman
 
-Error Responses
-User not found (404)
+Method → POST
 
-```json
+URL: http://localhost:8000/api/login
+
+Body → JSON → paste the credentials
+
+Send
+
+Copy the accessToken for protected routes
+
+Copy the refreshToken for refreshing token
+
+------------------------------------
+🟣 3. REFRESH TOKEN
+POST /api/refresh
+
+Takes a refreshToken and returns a new accessToken.
+
+✅ Request Body
 {
-  "message": "user not found"
+  "refreshToken": "YOUR_REFRESH_TOKEN_HERE"
 }
 
-Incorrect password (400)
-
-```json
+🟢 Successful Response
 {
-  "message": "incorrect password"
+  "accessToken": "new_access_token_here"
 }
 
-Server error (500)
+🧪 How to Test in Postman
 
-```json
+Method: POST
+
+URL: http://localhost:8000/api/refresh
+
+Body → JSON
+
+Paste the refresh token
+
+Send
+
+You will receive a fresh access token.
+
+------------------------------------
+🔴 4. LOGOUT
+POST /api/logout
+
+JWTs are stateless. Logout is done on the frontend by deleting the tokens.
+
+🟢 Response
 {
-  "message": "could not log in"
+  "message": "Logout successful. Delete tokens on client side."
 }
-```
 
-## **3. Get Current User (User Info)**
-**Endpoint**: `/api/user`
-**Method**: `GET`
-Description: Returns the currently authenticated user based on JWT in cookie.
+🧪 How to Test in Postman
 
-Headers
-Cookie: jwt=<token>
-Success Response (200)
-json
+Just send an empty POST request:
+
+Method: POST
+
+URL: http://localhost:8000/api/logout
+
+Send
+
+You will get the message above.
+
+------------------------------------
+🟩 5. GET AUTHENTICATED USER
+GET /api/user
+
+This route requires an Authorization header.
+
+🔐 Required Header
+Authorization: Bearer ACCESS_TOKEN_HERE
+
+🟢 Successful Response Example
 {
   "id": 1,
-  "name": "John Doe",
-  "email": "johndoe@example.com"
-}
-Error Response (401)
-json
-Copy code
-{
-  "message": "unauthenticated"
+  "name": "Nathan",
+  "email": "nathan@example.com"
 }
 
+🧪 How to Test in Postman
 
-## 4. Logout User
-Endpoint: /api/logout
-Method: POST
-Description: Logs out the user by clearing the JWT cookie.
+Login first and copy your accessToken
 
-Headers
+Create a new GET request
 
-Cookie: jwt=<token>
+http://localhost:8000/api/user
 
-Success Response (200)
-json
-{
-  "message": "success"
-}
-Notes
-All requests and responses are in JSON.
 
-Passwords are always hashed and never returned in any response.
+Go to Headers
 
-JWT is stored in HTTP-only cookie; frontend should send credentials with fetch:
+Add:
 
- fetch("/api/user", {
-  method: "GET",
-  credentials : "include"
-})
+Key: Authorization
+
+Value: Bearer YOUR_ACCESS_TOKEN
+
+Send
+
+If your access token is valid, you will receive the user.
+
+------------------------------------
+🧪 FULL WORKFLOW IN POSTMAN
+✔ Step 1 — Register
+
+→ POST /api/register
+
+✔ Step 2 — Login
+
+→ POST /api/login
+Save both tokens.
+
+✔ Step 3 — Access Protected Route
+
+→ GET /api/user
+Add header:
+Authorization: Bearer <accessToken>
+
+✔ Step 4 — Refresh Token
+
+→ POST /api/refresh
+Body: { "refreshToken": "..." }
+
+✔ Step 5 — Logout
+
+→ POST /api/logout

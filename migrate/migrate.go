@@ -11,5 +11,6 @@ func init() {
 }
 
 func main() {
+	// Auto-migrate your User model - creates/upgrades table automatically
 	initializers.DB.AutoMigrate(&models.User{})
 }
